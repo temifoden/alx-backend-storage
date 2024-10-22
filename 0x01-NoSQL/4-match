@@ -1,0 +1,2 @@
+// Gets all document with a match in a db
+db.school.find({ "name": "Holberton school" });
