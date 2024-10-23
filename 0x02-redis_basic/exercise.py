@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
-"""Initialixe the cache class with a redis instance""" 
 import redis
 import uuid
-from typing import Union, Callable, Optional
+from typing import Callable, Union, Optional
 import functools
 
 
@@ -27,12 +25,14 @@ def count_calls(method: Callable) -> Callable:
 
     return wrapper
 
+
 class Cache:
     def __init__(self):
         """Initialize the Cache class with a Redis instance and flush the DB."""
         self._redis = redis.Redis()
-        self._redis.flushdb()  # Flush all data from Redis
+        self._redis.flushdb()
 
+    @count_calls  # Decorate the store method to count its calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """
         Store the data in Redis with a randomly generated key and return the key.
@@ -58,33 +58,17 @@ class Cache:
         Returns:
             Optional[Union[str, bytes, int]]: The data retrieved from Redis, transformed by fn if provided.
         """
-        data = self._redis.get(key)  # Get the data from Redis
+        data = self._redis.get(key)
         if data is None:
-            return None  # Return None if key doesn't exist
-        return fn(data) if fn else data  # Apply the transformation if fn is provided, otherwise return raw data
+            return None
+        return fn(data) if fn else data
 
     def get_str(self, key: str) -> Optional[str]:
-        """
-        Retrieve a string value from Redis.
-
-        Args:
-            key (str): The key to look up in Redis.
-
-        Returns:
-            Optional[str]: The string data, or None if the key doesn't exist.
-        """
+        """Retrieve a string value from Redis."""
         return self.get(key, lambda d: d.decode("utf-8"))
 
     def get_int(self, key: str) -> Optional[int]:
-        """
-        Retrieve an integer value from Redis.
-
-        Args:
-            key (str): The key to look up in Redis.
-
-        Returns:
-            Optional[int]: The integer data, or None if the key doesn't exist.
-        """
+        """Retrieve an integer value from Redis."""
         return self.get(key, lambda d: int(d))
 
 
