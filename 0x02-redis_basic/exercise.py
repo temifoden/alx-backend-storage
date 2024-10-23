@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+"""Initialixe the cache class with a redis instance""" 
 import redis
 import uuid
 from typing import Union
