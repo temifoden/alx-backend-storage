@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cache class with Redis and call history tracking"""
+"""Cache class with Redis and call history replay"""
 import redis
 import uuid
 from typing import Union, Callable, Optional
@@ -7,89 +7,91 @@ import functools
 
 
 def call_history(method: Callable) -> Callable:
-    """
-    A decorator that stores the input arguments and output of a function in Redis.
-
-    Args:
-        method (Callable): The method to be decorated.
-
-    Returns:
-        Callable: The wrapped method with input/output logging.
-    """
+    """Stores the history of inputs and outputs for a particular function in Redis."""
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-        """Wrapper function to log inputs and outputs in Redis."""
+        """Wrapper to log inputs and outputs in Redis."""
         input_key = f"{method.__qualname__}:inputs"
         output_key = f"{method.__qualname__}:outputs"
 
-        # Store the input arguments in the 'inputs' list
+        # Store the input arguments
         self._redis.rpush(input_key, str(args))
 
-        # Call the original method and capture its output
-        output = method(self, *args, **kwargs)
+        # Call the original method and get its result
+        result = method(self, *args, **kwargs)
 
-        # Store the output in the 'outputs' list
-        self._redis.rpush(output_key, str(output))
+        # Store the output
+        self._redis.rpush(output_key, str(result))
 
-        # Return the output
-        return output
+        return result
 
     return wrapper
 
 
 def count_calls(method: Callable) -> Callable:
-    """
-    A decorator that counts how many times a method is called using Redis.
-
-    Args:
-        method (Callable): The method to be decorated.
-
-    Returns:
-        Callable: The wrapped method with call counting.
-    """
+    """Counts how many times a method is called."""
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-        """Wrapper function to increment the call count in Redis."""
-        key = method.__qualname__
-        self._redis.incr(key)
+        """Wrapper to count function calls in Redis."""
+        self._redis.incr(method.__qualname__)
         return method(self, *args, **kwargs)
 
     return wrapper
 
 
+def replay(method: Callable):
+    """
+    Display the history of calls to a particular function.
+    
+    Args:
+        method (Callable): The function whose call history we want to display.
+    """
+    # Get the qualified name of the method to form the Redis keys
+    input_key = f"{method.__qualname__}:inputs"
+    output_key = f"{method.__qualname__}:outputs"
+
+    # Retrieve the inputs and outputs from Redis
+    redis_instance = method.__self__._redis
+    inputs = redis_instance.lrange(input_key, 0, -1)
+    outputs = redis_instance.lrange(output_key, 0, -1)
+
+    # Count the number of calls
+    num_calls = len(inputs)
+
+    # Print the call history
+    print(f"{method.__qualname__} was called {num_calls} times:")
+
+    # Iterate over the zipped inputs and outputs
+    for input_args, output in zip(inputs, outputs):
+        input_args_str = input_args.decode("utf-8")
+        output_str = output.decode("utf-8")
+        print(f"{method.__qualname__}(*{input_args_str}) -> {output_str}")
+
+
 class Cache:
     def __init__(self):
-        """Initialize the Cache class with a Redis instance and flush the DB."""
+        """Initialize the Cache class with a Redis instance."""
         self._redis = redis.Redis()
         self._redis.flushdb()
 
-    @call_history  # Decorate with call_history to log inputs and outputs
-    @count_calls   # Decorate with count_calls to count how many times store is called
+    @call_history
+    @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """
         Store the data in Redis with a randomly generated key and return the key.
-
+        
         Args:
-            data (str, bytes, int, float): The data to be stored.
-
+            data (Union[str, bytes, int, float]): The data to store.
+        
         Returns:
-            str: The key under which the data is stored in Redis.
+            str: The key where the data is stored.
         """
-        key = str(uuid.uuid4())  # Generate a random UUID as the key
-        self._redis.set(key, data)  # Store the data in Redis with the generated key
+        key = str(uuid.uuid4())
+        self._redis.set(key, data)
         return key
 
     def get(self, key: str, fn: Optional[Callable] = None) -> Optional[Union[str, bytes, int]]:
-        """
-        Retrieve data from Redis using the given key and apply a transformation if fn is provided.
-
-        Args:
-            key (str): The key to look up in Redis.
-            fn (Callable, optional): A function to convert the data back to the desired format.
-
-        Returns:
-            Optional[Union[str, bytes, int]]: The data retrieved from Redis, transformed by fn if provided.
-        """
+        """Retrieve data from Redis."""
         data = self._redis.get(key)
         if data is None:
             return None
@@ -108,17 +110,10 @@ if __name__ == "__main__":
     # Example usage
     cache = Cache()
 
-    # Storing data
-    s1 = cache.store("first")
-    print(s1)
-    s2 = cache.store("second")
-    print(s2)
-    s3 = cache.store("third")
-    print(s3)
+    # Store some values
+    cache.store("foo")
+    cache.store("bar")
+    cache.store(42)
 
-    # Retrieve the input/output history from Redis
-    inputs = cache._redis.lrange(f"{cache.store.__qualname__}:inputs", 0, -1)
-    outputs = cache._redis.lrange(f"{cache.store.__qualname__}:outputs", 0, -1)
-
-    print("inputs: {}".format(inputs))
-    print("outputs: {}".format(outputs))
+    # Replay the call history
+    replay(cache.store)
