@@ -3,9 +3,8 @@
 
 
 def update_topics(mongo_collection, name, topics):
-    """ update document data"""
-    query = {name: name}
-    new_value = {"$set" : {topics: topics}}
+    """ Changes all topics of a school document based on the name """
+    query = {"name": name}
+    new_values = {"$set": {"topics": topics}}
 
-    document = mongo_collection.update_many(query, new_value)
-    return document
+    mongo_collection.update_many(query, new_values)
