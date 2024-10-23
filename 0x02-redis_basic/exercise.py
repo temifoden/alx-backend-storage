@@ -3,7 +3,29 @@
 import redis
 import uuid
 from typing import Union, Callable, Optional
+import functools
 
+
+def count_calls(method: Callable) -> Callable:
+    """
+    A decorator that counts how many times a method is called using Redis.
+
+    Args:
+        method (Callable): The method to be decorated.
+
+    Returns:
+        Callable: The wrapped method with call counting.
+    """
+    @functools.wraps(method)  # Preserve the original method's metadata (name, docstring, etc.)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function to increment the call count in Redis."""
+        # Increment the call count for the method's qualified name
+        key = method.__qualname__
+        self._redis.incr(key)
+        # Call the original method and return its result
+        return method(self, *args, **kwargs)
+
+    return wrapper
 
 class Cache:
     def __init__(self):
@@ -66,20 +88,14 @@ class Cache:
         return self.get(key, lambda d: int(d))
 
 
-
 if __name__ == "__main__":
     # Example usage
     cache = Cache()
 
-    # Test cases as per the problem statement
-    TEST_CASES = {
-        b"foo": None,
-        123: int,
-        "bar": lambda d: d.decode("utf-8")
-    }
+    # Storing data
+    cache.store(b"first")
+    print(cache.get(cache.store.__qualname__))  # Should print: b'1'
 
-    for value, fn in TEST_CASES.items():
-        key = cache.store(value)
-        assert cache.get(key, fn=fn) == value
-
-    print("All test cases passed.")
+    cache.store(b"second")
+    cache.store(b"third")
+    print(cache.get(cache.store.__qualname__))  # Should print: b'3'
