@@ -5,7 +5,7 @@
 def update_topics(mongo_collection, name, topics):
     """ update document data"""
     query = {name: name}
-    value = {"$set" : {topics: topics}}
-    optional = {"multi": true}
-    document = mongo_collection.update(query, value, optional)
+    new_value = {"$set" : {topics: topics}}
+
+    document = mongo_collection.update_many(query, new_value)
     return document
